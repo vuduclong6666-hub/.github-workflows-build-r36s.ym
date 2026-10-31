@@ -24,9 +24,9 @@ jobs:
               devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
               gamepad = None
               for dev in devices:
-                if "gamepad" in dev.name.lower() or "rk" in dev.name.lower():
-                  gamepad = dev
-                  break
+                  if "gamepad" in dev.name.lower() or "rk" in dev.name.lower():
+                      gamepad = dev
+                      break
               if not gamepad:
                   try:
                       gamepad = evdev.InputDevice('/dev/input/event0')

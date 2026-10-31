@@ -8,20 +8,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Maximize Build Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
 
-      - name: Install Build Dependencies
+      - name: Checkout Upstream Handtop Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'junsulee119/handtop'
+          fetch-depth: 1
+
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-static python3-pip
-          sudo pip3 install evdev --break-system-packages || true
+          sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-static python3-evdev xz-utils dosfstools parted kpartx
 
-      - name: Create R36S Input Daemon & Directories
+      - name: Inject R36S Custom Input Daemon
         run: |
-          mkdir -p src/inputd/
           mkdir -p overlay/usr/local/bin/
-          cat << 'EOF' > src/inputd/r36s_input.py
+          cat << 'EOF' > overlay/usr/local/bin/r36s_input.py
           #!/usr/bin/env python3
           import evdev
           from evdev import UInput, ecodes as e
@@ -65,19 +72,15 @@ jobs:
           if __name__ == "__main__":
               main()
           EOF
-          chmod +x src/inputd/r36s_input.py
-          cp src/inputd/r36s_input.py overlay/usr/local/bin/
+          chmod +x overlay/usr/local/bin/r36s_input.py
 
-      - name: Build Rootfs and OS Image
+      - name: Execute Handtop Build Pipeline
         run: |
-          sudo bash build/build-rootfs.sh || true
-          sudo bash build/10-image.sh || true
+          sudo bash build/00-rootfs.sh || sudo bash build/build-rootfs.sh
+          sudo bash build/10-image.sh
 
       - name: Upload Finished Image Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Handtop-R36S-OS-Image
-          path: |
-            work/out/*.img.xz
-            work/out/*.img
-          if-no-files-found: warn
+          path: work/out/*.img.xz

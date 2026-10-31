@@ -23,7 +23,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-static python3-evdev xz-utils dosfstools parted kpartx
+          sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-binfmt python3-evdev xz-utils dosfstools parted kpartx
 
       - name: Inject R36S Custom Input Daemon
         run: |
@@ -75,6 +75,12 @@ jobs:
           chmod +x overlay/usr/local/bin/r36s_input.py
 
       - name: Execute Handtop Build Pipeline
-        run: |sudo apt-get update
-sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-binfmt python3-evdev xz-utils dosfstools parted kpartx
-     
+        run: |
+          sudo bash build/00-rootfs.sh || sudo bash build/build-rootfs.sh
+          sudo bash build/10-image.sh
+
+      - name: Upload Finished Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Handtop-R36S-OS-Image
+          path: work/out/*.img.xz

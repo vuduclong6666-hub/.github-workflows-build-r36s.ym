@@ -1,34 +1,20 @@
-name: Build Handtop OS for R36S
+name: Package R36S Input Tools
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-r36s-image:
+  package-tools:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Maximize Build Space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-
-      - name: Checkout Upstream Handtop Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          repository: 'junsulee119/handtop'
-          fetch-depth: 1
 
-      - name: Install Dependencies
+      - name: Create Input Daemon Script
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-binfmt python3-evdev xz-utils dosfstools parted kpartx
-
-      - name: Inject R36S Custom Input Daemon
-        run: |
-          mkdir -p overlay/usr/local/bin/
-          cat << 'EOF' > overlay/usr/local/bin/r36s_input.py
+          mkdir -p output/usr/local/bin/
+          cat << 'EOF' > output/usr/local/bin/r36s_input.py
           #!/usr/bin/env python3
           import evdev
           from evdev import UInput, ecodes as e
@@ -38,13 +24,13 @@ jobs:
               devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
               gamepad = None
               for dev in devices:
-                  if "gamepad" in dev.name.lower() or "rk" in dev.name.lower():
-                      gamepad = dev
-                      break
+                if "gamepad" in dev.name.lower() or "rk" in dev.name.lower():
+                  gamepad = dev
+                  break
               if not gamepad:
                   try:
                       gamepad = evdev.InputDevice('/dev/input/event0')
-                  except Exception as err:
+                  except Exception:
                       sys.exit(1)
 
               cap = {
@@ -72,15 +58,11 @@ jobs:
           if __name__ == "__main__":
               main()
           EOF
-          chmod +x overlay/usr/local/bin/r36s_input.py
+          chmod +x output/usr/local/bin/r36s_input.py
+          cd output && tar -czvf ../r36s-input-daemon.tar.gz usr/
 
-      - name: Execute Handtop Build Pipeline
-        run: |
-          sudo bash build/00-rootfs.sh || sudo bash build/build-rootfs.sh
-          sudo bash build/10-image.sh
-
-      - name: Upload Finished Image Artifact
+      - name: Upload Script Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Handtop-R36S-OS-Image
-          path: work/out/*.img.xz
+          name: R36S-Input-Daemon
+          path: r36s-input-daemon.tar.gz

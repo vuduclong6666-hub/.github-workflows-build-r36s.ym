@@ -1,0 +1,79 @@
+name: Build Handtop OS for R36S
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-r36s-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git debootstrap u-boot-tools qemu-user-static python3-evdev
+
+      - name: Create R36S Input Daemon
+        run: |
+          mkdir -p src/inputd/
+          cat << 'EOF' > src/inputd/r36s_input.py
+          #!/usr/bin/env python3
+          import evdev
+          from evdev import UInput, ecodes as e
+          import sys
+
+          def main():
+              devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+              gamepad = None
+              for dev in devices:
+                  if "gamepad" in dev.name.lower() or "rk" in dev.name.lower():
+                      gamepad = dev
+                      break
+              if not gamepad:
+                  try:
+                      gamepad = evdev.InputDevice('/dev/input/event0')
+                  except Exception as err:
+                      sys.exit(1)
+
+              cap = {
+                  e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL],
+                  e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.KEY_ENTER, e.KEY_BACKSPACE, e.KEY_ESC]
+              }
+              ui = UInput(cap, name="r36s-virtual-input")
+
+              for event in gamepad.read_loop():
+                  if event.type == e.EV_ABS:
+                      if event.code == e.ABS_X:
+                          val = int((event.value - 128) / 8)
+                          if abs(val) > 2: ui.write(e.EV_REL, e.REL_X, val)
+                      elif event.code == e.ABS_Y:
+                          val = int((event.value - 128) / 8)
+                          if abs(val) > 2: ui.write(e.EV_REL, e.REL_Y, val)
+                  elif event.type == e.EV_KEY:
+                      if event.code == e.BTN_EAST: ui.write(e.EV_KEY, e.BTN_LEFT, event.value)
+                      elif event.code == e.BTN_SOUTH: ui.write(e.EV_KEY, e.BTN_RIGHT, event.value)
+                      elif event.code == e.BTN_NORTH: ui.write(e.EV_KEY, e.KEY_ENTER, event.value)
+                      elif event.code == e.BTN_WEST: ui.write(e.EV_KEY, e.KEY_BACKSPACE, event.value)
+                      elif event.code == e.BTN_TL: ui.write(e.EV_KEY, e.KEY_ESC, event.value)
+                  ui.syn()
+
+          if __name__ == "__main__":
+              main()
+          EOF
+          chmod +x src/inputd/r36s_input.py
+
+      - name: Build Rootfs and OS Image
+        run: |
+          sudo bash build/build-rootfs.sh
+          sudo cp src/inputd/r36s_input.py work/rootfs/usr/local/bin/
+          sudo bash build/10-image.sh
+
+      - name: Upload Finished Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Handtop-R36S-OS-Image
+          path: work/out/*.img.xz
+    
